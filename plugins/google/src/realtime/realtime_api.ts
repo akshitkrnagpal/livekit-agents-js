@@ -1820,8 +1820,10 @@ export class RealtimeSession extends llm.RealtimeSession {
           response: {},
           willContinue: true,
         };
-        if (!this.options.vertexai && this.options.toolResponseScheduling !== undefined) {
-          continuingResponse.scheduling = this.options.toolResponseScheduling;
+        if (!this.options.vertexai) {
+          // The empty placeholder only acknowledges a pending call. Scheduling it as a
+          // result would trigger an extra model turn before the actual result arrives.
+          continuingResponse.scheduling = types.FunctionResponseScheduling.SILENT;
         }
         this.sendClientEvent({
           type: 'tool_response',

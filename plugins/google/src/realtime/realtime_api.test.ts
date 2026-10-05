@@ -226,7 +226,7 @@ const schedulingModes = [
 ];
 
 function createSessionForTest(
-  toolResponseScheduling: FunctionResponseScheduling,
+  toolResponseScheduling?: FunctionResponseScheduling,
 ): RealtimeSessionInternals {
   const session = Object.create(RealtimeSession.prototype) as RealtimeSessionInternals;
   session.options = {
@@ -255,8 +255,8 @@ function createSessionForTest(
 }
 
 describe('Google Realtime non-blocking tool scheduling', () => {
-  it.each(schedulingModes)(
-    'sends %s on the immediate willContinue response',
+  it.each([undefined, ...schedulingModes])(
+    'keeps the immediate willContinue response silent with final scheduling %s',
     (toolResponseScheduling) => {
       const session = createSessionForTest(toolResponseScheduling);
 
@@ -278,7 +278,7 @@ describe('Google Realtime non-blocking tool scheduling', () => {
               id: 'call_123',
               name: 'getWeather',
               response: {},
-              scheduling: toolResponseScheduling,
+              scheduling: FunctionResponseScheduling.SILENT,
               willContinue: true,
             },
           ],
@@ -402,7 +402,7 @@ describe('Google Realtime non-blocking tool scheduling', () => {
             id: undefined,
             name: 'getWeather',
             response: {},
-            ...(vertexai ? {} : { scheduling: FunctionResponseScheduling.WHEN_IDLE }),
+            ...(vertexai ? {} : { scheduling: FunctionResponseScheduling.SILENT }),
             willContinue: true,
           },
         ],
