@@ -76,6 +76,49 @@ function stubTaskRuntime(): void {
   } as unknown as Task<void>);
 }
 
+describe('RealtimeSession input transcription configuration', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each(['minimal', 'low', 'medium', 'high', 'xhigh'] as const)(
+    'forwards the %s transcription delay in GA session updates',
+    (delay) => {
+      stubTaskRuntime();
+      const sendEvent = vi.spyOn(RealtimeSession.prototype, 'sendEvent');
+      const inputAudioTranscription: api_proto.InputAudioTranscription = {
+        model: 'gpt-realtime-whisper',
+        delay,
+        language: 'ja',
+      };
+
+      new RealtimeModel({ apiKey: 'test-key', inputAudioTranscription }).session();
+
+      expect(sendEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'session.update',
+          session: expect.objectContaining({
+            type: 'realtime',
+            audio: expect.objectContaining({
+              input: expect.objectContaining({ transcription: inputAudioTranscription }),
+            }),
+          }),
+        }),
+      );
+    },
+  );
+
+  it('leaves transcription delay unset by default', () => {
+    stubTaskRuntime();
+    const sendEvent = vi.spyOn(RealtimeSession.prototype, 'sendEvent');
+
+    new RealtimeModel({ apiKey: 'test-key' }).session();
+
+    const event = sendEvent.mock.calls[0]![0] as api_proto.SessionUpdateEvent;
+    expect(event.session.audio?.input?.transcription).not.toHaveProperty('delay');
+  });
+});
+
 describe('RealtimeSession.generateReply', () => {
   it('preserves session instructions when generating with per-response instructions', async () => {
     const session = createSessionForTest();

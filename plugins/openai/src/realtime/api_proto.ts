@@ -132,6 +132,11 @@ export type TurnDetectionType =
 
 export type InputAudioTranscription = {
   model: InputTranscriptionModel;
+  /**
+   * How long to wait before emitting transcription text. Higher values trade latency for accuracy.
+   * Only supported with `gpt-realtime-whisper` in GA Realtime sessions.
+   */
+  delay?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   language?: string;
   languages?: string[];
   keywords?: string[];

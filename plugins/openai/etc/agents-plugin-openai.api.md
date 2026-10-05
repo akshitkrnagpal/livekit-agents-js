@@ -8,7 +8,7 @@ import { AgentInference } from '@livekit/protocol';
 import { AgentSession as AgentSession_2 } from '@livekit/protocol';
 import { AudioFrame } from '@livekit/rtc-node';
 import { AudioResampler } from '@livekit/rtc-node';
-import type { Context } from '@opentelemetry/api';
+import { Context } from '@opentelemetry/api';
 import { EventEmitter } from 'events';
 import { EventEmitter as EventEmitter_2 } from 'node:events';
 import type { EventMap } from '@livekit/typed-emitter';
@@ -25,7 +25,7 @@ import type { ReadableStreamDefaultReader as ReadableStreamDefaultReader_2 } fro
 import type { Reasoning as Reasoning_2 } from 'openai/resources/shared.js';
 import { RemoteParticipant } from '@livekit/rtc-node';
 import { Room } from '@livekit/rtc-node';
-import type { Span } from '@opentelemetry/api';
+import { Span } from '@opentelemetry/api';
 import type { TextStreamInfo } from '@livekit/rtc-node';
 import { Throws } from '@livekit/throws-transformer/throws';
 import { ThrowsPromise } from '@livekit/throws-transformer/throws';
@@ -679,6 +679,7 @@ interface InputAudioContent {
 // @public (undocumented)
 type InputAudioTranscription = {
     model: InputTranscriptionModel;
+    delay?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
     language?: string;
     languages?: string[];
     keywords?: string[];
