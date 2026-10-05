@@ -102,6 +102,12 @@ export interface EndOfTurnInfo {
    */
   userTurnSpan?: Span;
   userTurnSpanAdopted?: boolean;
+  /**
+   * Set by the activity when a rejected turn's transcript must be discarded rather than
+   * retained for a deferred decision. The turn is not added to chat context.
+   * @internal
+   */
+  discardTranscript?: boolean;
 }
 
 export type EouWaitOutcome = 'committed' | 'user_resumed' | 'dropped';
@@ -1883,15 +1889,18 @@ export class AudioRecognition {
           backchannelOverAgent: this.turnBackchannelOverAgent,
           userTurnSpan,
         };
+        const transcriptFinalCount = this.finalTranscriptConfidence.length;
         const committed = await this.hooks.onEndOfTurn(endOfTurn);
 
-        if (committed) {
+        if (committed || endOfTurn.discardTranscript) {
           // the decision is this bounce's: while the hook ran the user may have resumed and
           // stopped again, opening the next turn's wait, which is not the one decided here
-          if (this.eouWaitSpan === eouWaitSpan) this.endEouWaitSpan('committed');
+          if (this.eouWaitSpan === eouWaitSpan) {
+            this.endEouWaitSpan(committed ? 'committed' : 'dropped');
+          }
           this._endUserTurnSpan(
             {
-              transcript: this.audioTranscript,
+              transcript: committed ? this.audioTranscript : endOfTurn.newTranscript,
               confidence: confidenceAvg,
               transcriptionDelay: metrics.transcriptionDelay ?? 0,
               endOfUtteranceDelay: metrics.endOfUtteranceDelay ?? 0,
@@ -1901,12 +1910,27 @@ export class AudioRecognition {
             { turn: userTurnSpan, wait: eouWaitSpan },
           );
 
-          // clear the transcript if the user turn was committed
-          this.audioTranscript = '';
-          this.finalTranscriptConfidence = [];
-          this.lastFinalTranscriptTime = 0;
+          if (committed) {
+            this.audioTranscript = '';
+            this.finalTranscriptConfidence = [];
+            this.lastFinalTranscriptTime = 0;
+          } else if (this.audioTranscript.startsWith(endOfTurn.newTranscript)) {
+            // Only consume the rejected snapshot: a final transcript received while the
+            // hook was awaiting belongs to the next decision and must be preserved.
+            this.audioTranscript = this.audioTranscript
+              .slice(endOfTurn.newTranscript.length)
+              .trimStart();
+            this.finalTranscriptConfidence.splice(0, transcriptFinalCount);
+            if (!this.audioTranscript) {
+              this.lastFinalTranscriptTime = 0;
+            }
+          }
           // Concurrent user speech might have changed it; only reset if there is no new speech.
-          if (this.lastSpeakingTime === lastSpeakingTime) {
+          if (
+            !this.audioTranscript &&
+            !this.speaking &&
+            this.lastSpeakingTime === lastSpeakingTime
+          ) {
             this.speechStartTime = undefined;
             this.vadSpeechStarted = false;
             this.lastSpeakingTime = undefined;
@@ -1915,14 +1939,17 @@ export class AudioRecognition {
           // Flush the in-flight request and write the turn-boundary sentinel to
           // the transport so the next turn's predict starts fresh — the normal
           // EOU-commit path, mirroring clearUserTurn()'s flush on interrupt.
-          if (this.turnDetectorStream !== undefined) {
-            this.turnDetectorStream.flush('turn committed');
+          const discardedTurnEnded = !this.audioTranscript && !this.speaking;
+          if (this.turnDetectorStream !== undefined && (committed || discardedTurnEnded)) {
+            this.turnDetectorStream.flush(committed ? 'turn committed' : 'turn discarded');
             this.turnDetectorPredictionFut = undefined;
             this.turnDetectorFlushed = true;
           }
-          this.resetTranscriptionTimeout();
+          if (committed || discardedTurnEnded) {
+            this.resetTranscriptionTimeout();
+          }
         } else if (eouWaitSpan.isRecording()) {
-          // the decision is deferred (below min words, realtime backchannel): keep waiting
+          // the decision is deferred (e.g. a realtime backchannel): keep waiting
           this.eouWaitNotCommitted += 1;
         }
 

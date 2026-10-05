@@ -2723,6 +2723,9 @@ export class AgentActivity implements RecognitionHooks {
           },
           'skipping user input, word count below minimum interruption threshold',
         );
+        // This turn was rejected, not deferred. Retaining it would let separate
+        // backchannels accumulate past minWords or prefix an unrelated later turn.
+        info.discardTranscript = true;
         return false;
       }
     }
