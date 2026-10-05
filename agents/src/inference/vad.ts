@@ -341,7 +341,7 @@ class InferenceVADStream extends BaseVADStream {
         if (pubSpeaking) pubSpeechDurationMs += windowDurationMs;
         else pubSilenceDurationMs += windowDurationMs;
 
-        this.sendVADEvent({
+        await this.sendVADEvent({
           type: VADEventType.INFERENCE_DONE,
           samplesIndex: pubCurrentSample,
           timestamp: pubTimestampMs,
@@ -372,7 +372,7 @@ class InferenceVADStream extends BaseVADStream {
             pubSpeaking = true;
             pubSilenceDurationMs = 0;
             pubSpeechDurationMs = speechThresholdDurationMs;
-            this.sendVADEvent({
+            await this.sendVADEvent({
               type: VADEventType.START_OF_SPEECH,
               samplesIndex: pubCurrentSample,
               timestamp: pubTimestampMs,
@@ -397,7 +397,7 @@ class InferenceVADStream extends BaseVADStream {
           if (pubSpeaking && silenceThresholdDurationMs >= this._opts.minSilenceDuration) {
             pubSpeaking = false;
             pubSilenceDurationMs = silenceThresholdDurationMs;
-            this.sendVADEvent({
+            await this.sendVADEvent({
               type: VADEventType.END_OF_SPEECH,
               samplesIndex: pubCurrentSample,
               timestamp: pubTimestampMs,

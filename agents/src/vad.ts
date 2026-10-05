@@ -102,8 +102,8 @@ export abstract class VAD extends (EventEmitter as new () => TypedEmitter<VADCal
 
 export abstract class VADStream implements AsyncIterableIterator<VADEvent> {
   protected static readonly FLUSH_SENTINEL = Symbol('FLUSH_SENTINEL');
-  protected input = new IdentityTransform<AudioFrame | typeof VADStream.FLUSH_SENTINEL>();
-  protected output = new IdentityTransform<VADEvent>();
+  protected input = new IdentityTransform<AudioFrame | typeof VADStream.FLUSH_SENTINEL>(1);
+  protected output = new IdentityTransform<VADEvent>(1);
   protected inputWriter: WritableStreamDefaultWriter<AudioFrame | typeof VADStream.FLUSH_SENTINEL>;
   protected inputReader: ReadableStreamDefaultReader<AudioFrame | typeof VADStream.FLUSH_SENTINEL>;
   protected outputWriter: WritableStreamDefaultWriter<VADEvent>;
@@ -116,22 +116,31 @@ export abstract class VADStream implements AsyncIterableIterator<VADEvent> {
   protected logger;
   protected deferredInputStream: DeferredReadableStream<AudioFrame>;
 
-  private metricsStream: ReadableStream<VADEvent>;
+  private metricsReader: ReadableStreamDefaultReader<VADEvent>;
+  private metricsOutput = new IdentityTransform<VADEvent>(1);
+  private metricsOutputWriter = this.metricsOutput.writable.getWriter();
+  private deferredInputReader: ReadableStreamDefaultReader<AudioFrame>;
   constructor(vad: VAD) {
     this.logger = log();
     this.vad = vad;
-    this.deferredInputStream = new DeferredReadableStream<AudioFrame>();
+    this.deferredInputStream = new DeferredReadableStream<AudioFrame>(1);
+    this.deferredInputReader = this.deferredInputStream.stream.getReader();
 
     this.inputWriter = this.input.writable.getWriter();
     this.inputReader = this.input.readable.getReader();
     this.outputWriter = this.output.writable.getWriter();
 
-    const [outputStream, metricsStream] = this.output.readable.tee();
-    this.metricsStream = metricsStream;
-    this.outputReader = outputStream.getReader();
+    // Observe metrics in the same bounded forwarding path as the real consumer.
+    // A tee lets its fast metrics branch drain indefinitely ahead of a stalled reader.
+    this.metricsReader = this.output.readable.getReader();
+    this.outputReader = this.metricsOutput.readable.getReader();
 
-    this.pumpDeferredStream();
-    this.monitorMetrics();
+    void this.pumpDeferredStream().catch((error) => {
+      if (!this.closed) this.logger.error(error, 'Error pumping VAD input');
+    });
+    void this.monitorMetrics().catch((error) => {
+      if (!this.closed) this.logger.error(error, 'Error forwarding VAD events');
+    });
   }
 
   /**
@@ -142,7 +151,7 @@ export abstract class VADStream implements AsyncIterableIterator<VADEvent> {
    * the inputWriter.
    */
   private async pumpDeferredStream() {
-    const reader = this.deferredInputStream.stream.getReader();
+    const reader = this.deferredInputReader;
     try {
       while (true) {
         const { done, value } = await reader.read();
@@ -150,7 +159,7 @@ export abstract class VADStream implements AsyncIterableIterator<VADEvent> {
         await this.inputWriter.write(value);
       }
     } catch (e) {
-      this.logger.error(`Error pumping deferred stream: ${e}`);
+      if (this.closed) return;
       throw e;
     } finally {
       reader.releaseLock();
@@ -160,56 +169,69 @@ export abstract class VADStream implements AsyncIterableIterator<VADEvent> {
   protected async monitorMetrics() {
     let inferenceDurationTotalMs = 0;
     let inferenceCount = 0;
-    const metricsReader = this.metricsStream.getReader();
-    while (true) {
-      const { done, value } = await metricsReader.read();
-      if (done) {
-        break;
-      }
-      switch (value.type) {
-        case VADEventType.START_OF_SPEECH:
-          inferenceCount++;
-          if (inferenceCount >= 1000 / this.vad.capabilities.updateInterval) {
-            this.vad.emit('metrics_collected', {
-              type: 'vad_metrics',
-              timestamp: Date.now(),
-              idleTimeMs: Math.trunc(
-                Number((process.hrtime.bigint() - this.lastActivityTime) / BigInt(1000000)),
-              ),
-              inferenceDurationTotalMs,
-              inferenceCount,
-              label: this.vad.label,
-            });
+    const metricsReader = this.metricsReader;
+    try {
+      while (true) {
+        const { done, value } = await metricsReader.read();
+        if (done) {
+          break;
+        }
+        switch (value.type) {
+          case VADEventType.START_OF_SPEECH:
+            inferenceCount++;
+            if (inferenceCount >= 1000 / this.vad.capabilities.updateInterval) {
+              this.vad.emit('metrics_collected', {
+                type: 'vad_metrics',
+                timestamp: Date.now(),
+                idleTimeMs: Math.trunc(
+                  Number((process.hrtime.bigint() - this.lastActivityTime) / BigInt(1000000)),
+                ),
+                inferenceDurationTotalMs,
+                inferenceCount,
+                label: this.vad.label,
+              });
 
-            inferenceCount = 0;
-            inferenceDurationTotalMs = 0;
-          }
-          break;
-        case VADEventType.INFERENCE_DONE:
-          inferenceDurationTotalMs += Math.round(value.inferenceDuration);
-          this.lastActivityTime = process.hrtime.bigint();
-          break;
-        case VADEventType.END_OF_SPEECH:
-          this.lastActivityTime = process.hrtime.bigint();
-          break;
+              inferenceCount = 0;
+              inferenceDurationTotalMs = 0;
+            }
+            break;
+          case VADEventType.INFERENCE_DONE:
+            inferenceDurationTotalMs += Math.round(value.inferenceDuration);
+            this.lastActivityTime = process.hrtime.bigint();
+            break;
+          case VADEventType.END_OF_SPEECH:
+            this.lastActivityTime = process.hrtime.bigint();
+            break;
+        }
+        await this.metricsOutputWriter.write(value);
       }
+      if (!this.closed) await this.metricsOutputWriter.close();
+    } catch (error) {
+      if (!this.closed) {
+        await this.metricsOutputWriter.abort(error).catch(() => {});
+        throw error;
+      }
+    } finally {
+      metricsReader.releaseLock();
     }
   }
 
   /**
-   * Safely send a VAD event to the output stream, handling writer release errors during shutdown.
+   * Send a VAD event, waiting for downstream capacity. Producers must await this method
+   * before performing the next inference so slow consumers can apply backpressure.
    * @returns true if the event was sent, false if the stream is closing
    * @throws Error if an unexpected error occurs
    */
-  protected sendVADEvent(event: VADEvent): boolean {
+  protected async sendVADEvent(event: VADEvent): Promise<boolean> {
     if (this.closed) {
       return false;
     }
 
     try {
-      this.outputWriter.write(event);
+      await this.outputWriter.write(event);
       return true;
     } catch (e) {
+      if (this.closed) return false;
       throw e;
     }
   }
@@ -231,7 +253,9 @@ export abstract class VADStream implements AsyncIterableIterator<VADEvent> {
     if (this.closed) {
       throw new Error('Stream is closed');
     }
-    this.inputWriter.write(frame);
+    void this.inputWriter.write(frame).catch((error) => {
+      if (!this.closed) this.logger.error(error, 'Error writing VAD frame');
+    });
   }
 
   /**
@@ -247,7 +271,9 @@ export abstract class VADStream implements AsyncIterableIterator<VADEvent> {
     if (this.closed) {
       throw new Error('Stream is closed');
     }
-    this.inputWriter.write(VADStream.FLUSH_SENTINEL);
+    void this.inputWriter.write(VADStream.FLUSH_SENTINEL).catch((error) => {
+      if (!this.closed) this.logger.error(error, 'Error flushing VAD stream');
+    });
   }
 
   endInput() {
@@ -271,10 +297,19 @@ export abstract class VADStream implements AsyncIterableIterator<VADEvent> {
   }
 
   close() {
-    this.outputWriter.releaseLock();
-    this.outputReader.cancel();
-    this.output.writable.close();
+    if (this.closed) return;
     this.closed = true;
+    this.inputClosed = true;
+    // Release pending writes before the inference task is drained. Closing a writable
+    // would wait forever for capacity if the consumer has stopped reading.
+    void this.outputReader.cancel().catch(() => {});
+    void this.metricsReader.cancel().catch(() => {});
+    void this.outputWriter.abort().catch(() => {});
+    void this.metricsOutputWriter.abort().catch(() => {});
+    void this.inputReader.cancel().catch(() => {});
+    void this.inputWriter.abort().catch(() => {});
+    void this.deferredInputReader.cancel().catch(() => {});
+    void this.deferredInputStream.detachSource().catch(() => {});
   }
 
   [Symbol.asyncIterator](): VADStream {

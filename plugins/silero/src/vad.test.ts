@@ -13,12 +13,45 @@ import { VAD_WINDOW_SAMPLES, createVad } from '@livekit/local-inference';
 import { AudioFrame, AudioResampler } from '@livekit/rtc-node';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { ReadableStream } from 'node:stream/web';
 import { describe, expect, it, vi } from 'vitest';
 import { OnnxModel, newInferenceSession } from './onnx_model.js';
 import { VAD } from './vad.js';
 
 const TARGET_SAMPLE_RATE = 16000;
 const CHUNK_DURATION_MS = 10;
+
+it('pauses Silero inference until its consumer resumes reading', async () => {
+  const vad = await VAD.load();
+  const runSpy = vi.spyOn(OnnxModel.prototype, 'run').mockResolvedValue(0);
+  const stream = vad.stream();
+  let pulls = 0;
+  stream.updateInputStream(
+    new ReadableStream<AudioFrame>({
+      pull(controller) {
+        pulls++;
+        controller.enqueue(AudioFrame.create(TARGET_SAMPLE_RATE, 1, 512));
+      },
+    }),
+  );
+  const nextTick = () => new Promise<void>((resolve) => setImmediate(resolve));
+  try {
+    await nextTick();
+    expect(runSpy.mock.calls.length).toBeGreaterThan(0);
+    expect(runSpy.mock.calls.length).toBeLessThan(5);
+    expect(pulls).toBeLessThan(20);
+    const stalledAt = runSpy.mock.calls.length;
+    await nextTick();
+    expect(runSpy).toHaveBeenCalledTimes(stalledAt);
+    for (let index = 0; index < 10; index++) await stream.next();
+    await nextTick();
+    expect(runSpy.mock.calls.length).toBeGreaterThan(stalledAt);
+  } finally {
+    stream.close();
+    await nextTick();
+    runSpy.mockRestore();
+  }
+});
 
 /**
  * Build a short, deterministic clip: ~1.5s of real speech (from the shared test

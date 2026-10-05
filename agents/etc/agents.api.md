@@ -2853,7 +2853,7 @@ export const defaultUserTurnLimitOptions: UserTurnLimitOptions;
 
 // @public (undocumented)
 class DeferredReadableStream<T> {
-    constructor();
+    constructor(highWaterMark?: number);
     detachSource(): Promise<void>;
     // (undocumented)
     get isSourceSet(): boolean;
@@ -3986,7 +3986,7 @@ const hyphenateWord: (word: string) => string[];
 
 // @public (undocumented)
 class IdentityTransform<T> extends TransformStream_2<T, T> {
-    constructor();
+    constructor(highWaterMark?: number);
 }
 
 // @public (undocumented)
@@ -8657,7 +8657,7 @@ export abstract class VADStream implements AsyncIterableIterator<VADEvent> {
     protected outputWriter: WritableStreamDefaultWriter_2<VADEvent>;
     // @deprecated (undocumented)
     pushFrame(frame: AudioFrame): void;
-    protected sendVADEvent(event: VADEvent): boolean;
+    protected sendVADEvent(event: VADEvent): Promise<boolean>;
     // (undocumented)
     updateInputStream(audioStream: ReadableStream_2<AudioFrame>): void;
     // (undocumented)

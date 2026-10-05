@@ -4,15 +4,17 @@
 import { TransformStream } from 'node:stream/web';
 
 export class IdentityTransform<T> extends TransformStream<T, T> {
-  constructor() {
+  /**
+   * @param highWaterMark - Maximum queued chunks on each side of the transform.
+   * Defaults to effectively unlimited buffering for compatibility with existing channels.
+   */
+  constructor(highWaterMark = Number.MAX_SAFE_INTEGER) {
     super(
       {
         transform: (chunk, controller) => controller.enqueue(chunk),
       },
-      // By default the transfor stream will buffer only one chunk at a time.
-      // In order to follow the python agents channel.py, we set set the capaciy to be effectively infinite.
-      { highWaterMark: Number.MAX_SAFE_INTEGER },
-      { highWaterMark: Number.MAX_SAFE_INTEGER },
+      { highWaterMark },
+      { highWaterMark },
     );
   }
 }

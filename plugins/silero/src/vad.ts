@@ -299,7 +299,7 @@ export class VADStream extends baseStream {
           }
 
           if (
-            !this.sendVADEvent({
+            !(await this.sendVADEvent({
               type: VADEventType.INFERENCE_DONE,
               samplesIndex: pubCurrentSample,
               timestamp: pubTimestamp,
@@ -318,7 +318,7 @@ export class VADStream extends baseStream {
               speaking: pubSpeaking,
               rawAccumulatedSilence: silenceThresholdDuration,
               rawAccumulatedSpeech: speechThresholdDuration,
-            })
+            }))
           ) {
             continue;
           }
@@ -357,7 +357,7 @@ export class VADStream extends baseStream {
               pubSpeechDuration = speechThresholdDuration;
 
               if (
-                !this.sendVADEvent({
+                !(await this.sendVADEvent({
                   type: VADEventType.START_OF_SPEECH,
                   samplesIndex: pubCurrentSample,
                   timestamp: pubTimestamp,
@@ -369,7 +369,7 @@ export class VADStream extends baseStream {
                   speaking: pubSpeaking,
                   rawAccumulatedSilence: 0,
                   rawAccumulatedSpeech: 0,
-                })
+                }))
               ) {
                 continue;
               }
@@ -388,7 +388,7 @@ export class VADStream extends baseStream {
               pubSilenceDuration = silenceThresholdDuration;
 
               if (
-                !this.sendVADEvent({
+                !(await this.sendVADEvent({
                   type: VADEventType.END_OF_SPEECH,
                   samplesIndex: pubCurrentSample,
                   timestamp: pubTimestamp,
@@ -400,7 +400,7 @@ export class VADStream extends baseStream {
                   speaking: pubSpeaking,
                   rawAccumulatedSilence: 0,
                   rawAccumulatedSpeech: 0,
-                })
+                }))
               ) {
                 continue;
               }

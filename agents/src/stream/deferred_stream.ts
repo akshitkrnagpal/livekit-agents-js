@@ -43,8 +43,8 @@ export class DeferredReadableStream<T> {
   private sourceReader?: ReadableStreamDefaultReader<T>;
   private sourceAttached = false;
 
-  constructor() {
-    this.transform = new IdentityTransform<T>();
+  constructor(highWaterMark = Number.MAX_SAFE_INTEGER) {
+    this.transform = new IdentityTransform<T>(highWaterMark);
     this.writer = this.transform.writable.getWriter();
   }
 

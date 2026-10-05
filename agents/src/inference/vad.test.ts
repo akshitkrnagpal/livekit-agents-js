@@ -1,9 +1,12 @@
 // SPDX-FileCopyrightText: 2026 LiveKit, Inc.
 //
 // SPDX-License-Identifier: Apache-2.0
-import { beforeAll, describe, expect, it } from 'vitest';
+import { AudioFrame } from '@livekit/rtc-node';
+import { ReadableStream } from 'node:stream/web';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { initializeLogger } from '../log.js';
 import type { VADStream } from '../vad.js';
+import * as warmup from './_warmup.js';
 import { VAD, type VADOptions } from './vad.js';
 
 beforeAll(() => {
@@ -19,6 +22,43 @@ type StreamInternals = {
 };
 
 const internals = (stream: VADStream): StreamInternals => stream as unknown as StreamInternals;
+
+it('pauses native VAD inference until its consumer resumes reading', async () => {
+  const native = warmup._getLocalInferenceModule();
+  expect(native).toBeDefined();
+  const predict = vi.fn().mockResolvedValue(0);
+  const moduleSpy = vi.spyOn(warmup, '_getLocalInferenceModule').mockReturnValue({
+    ...native!,
+    createVad: () => ({ predict, reset: vi.fn() }),
+  });
+  const stream = new VAD().stream();
+  let pulls = 0;
+  stream.updateInputStream(
+    new ReadableStream<AudioFrame>({
+      pull(controller) {
+        pulls++;
+        controller.enqueue(AudioFrame.create(16000, 1, 512));
+      },
+    }),
+  );
+  const nextTick = () => new Promise<void>((resolve) => setImmediate(resolve));
+  try {
+    await nextTick();
+    expect(predict.mock.calls.length).toBeGreaterThan(0);
+    expect(predict.mock.calls.length).toBeLessThan(5);
+    expect(pulls).toBeLessThan(20);
+    const stalledAt = predict.mock.calls.length;
+    await nextTick();
+    expect(predict).toHaveBeenCalledTimes(stalledAt);
+    for (let index = 0; index < 10; index++) await stream.next();
+    await nextTick();
+    expect(predict.mock.calls.length).toBeGreaterThan(stalledAt);
+  } finally {
+    stream.close();
+    await nextTick();
+    moduleSpy.mockRestore();
+  }
+});
 
 describe('inference.VAD updateOptions propagation', () => {
   it('fans out option changes to live streams', () => {
