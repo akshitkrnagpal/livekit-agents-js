@@ -5,7 +5,7 @@ import { llm } from '@livekit/agents';
 import { llmStrict, llm as testLLM } from '@livekit/agents-plugins-test';
 import OpenAI from 'openai';
 import { describe, expect, it, vi } from 'vitest';
-import { LLM } from './llm.js';
+import { LLM, type LLMOptions } from './llm.js';
 
 // Some OpenAI-compatible proxies send a final chunk whose usage object is present but has null
 // numeric fields. The SDK builds its usage model leniently, so those nulls reach our usage
@@ -19,6 +19,54 @@ data: {"id":"chatcmpl-test","choices":[],"created":0,"model":"m","object":"chat.
 data: [DONE]
 
 `;
+
+describe('OpenAI-compatible default request options', () => {
+  it.each([
+    ['OpenAI', (options: Partial<LLMOptions>) => new LLM(options)],
+    ['Telnyx', LLM.withTelnyx],
+    ['Ollama', LLM.withOllama],
+  ] as const)(
+    'persists custom options for %s without retaining per-call overrides',
+    async (_, factory) => {
+      const requests: Record<string, unknown>[] = [];
+      const client = new OpenAI({
+        apiKey: 'test-key',
+        fetch: async (_url, init) => {
+          requests.push(JSON.parse(init!.body as string));
+          return new Response(streamWithNullUsage, {
+            headers: { 'content-type': 'text/event-stream' },
+          });
+        },
+      });
+      const extraKwargs = { enable_thinking: false, custom_parameter: 'default' };
+      const options = { model: 'm', apiKey: 'test-key', client, extraKwargs };
+      const model = factory(options);
+      const chatCtx = new llm.ChatContext();
+      chatCtx.addMessage({ role: 'user', content: 'hi' });
+
+      try {
+        for (const overrides of [
+          undefined,
+          { enable_thinking: true, custom_parameter: 'override' },
+          undefined,
+        ]) {
+          const stream = model.chat({ chatCtx, extraKwargs: overrides });
+          for await (const _chunk of stream) {
+            // Consume the real stream so assertions inspect the outgoing HTTP request.
+          }
+        }
+      } finally {
+        await model.aclose();
+      }
+
+      expect(requests).toHaveLength(3);
+      expect(requests[0]).toMatchObject(extraKwargs);
+      expect(requests[1]).toMatchObject({ enable_thinking: true, custom_parameter: 'override' });
+      expect(requests[2]).toMatchObject(extraKwargs);
+      expect(extraKwargs).toEqual({ enable_thinking: false, custom_parameter: 'default' });
+    },
+  );
+});
 
 describe('OpenAI LLM prewarm', () => {
   it('lists models with the prewarm cancellation signal', async () => {

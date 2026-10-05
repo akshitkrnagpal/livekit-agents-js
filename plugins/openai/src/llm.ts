@@ -25,6 +25,11 @@ export interface LLMOptions {
   baseURL?: string;
   user?: string;
   temperature?: number;
+  /**
+   * Default extra parameters for OpenAI-compatible chat completion requests.
+   * Per-call `extraKwargs` override these defaults. Explicit SDK options retain their precedence.
+   */
+  extraKwargs?: Record<string, unknown>;
   topP?: number;
   client?: OpenAI;
   toolChoice?: llm.ToolChoice;
@@ -131,6 +136,7 @@ export class LLM extends llm.LLM {
       baseURL?: string;
       user?: string;
       temperature?: number;
+      extraKwargs?: Record<string, unknown>;
     } = defaultAzureLLMOptions,
   ): LLM {
     opts = { ...defaultAzureLLMOptions, ...opts };
@@ -140,6 +146,7 @@ export class LLM extends llm.LLM {
 
     return new LLM({
       temperature: opts.temperature,
+      extraKwargs: opts.extraKwargs,
       user: opts.user,
       client: new AzureOpenAI({ ...opts, maxRetries: 0 }),
     });
@@ -159,6 +166,7 @@ export class LLM extends llm.LLM {
       baseURL?: string;
       user?: string;
       temperature?: number;
+      extraKwargs?: Record<string, unknown>;
       client: OpenAI;
     }> = {},
   ): LLM {
@@ -212,6 +220,7 @@ export class LLM extends llm.LLM {
       baseURL?: string;
       user?: string;
       temperature?: number;
+      extraKwargs?: Record<string, unknown>;
       client: OpenAI;
     }> = {},
   ): LLM {
@@ -241,6 +250,7 @@ export class LLM extends llm.LLM {
       baseURL?: string;
       user?: string;
       temperature?: number;
+      extraKwargs?: Record<string, unknown>;
       client: OpenAI;
     }> = {},
   ): LLM {
@@ -270,6 +280,7 @@ export class LLM extends llm.LLM {
       baseURL?: string;
       user?: string;
       temperature?: number;
+      extraKwargs?: Record<string, unknown>;
       client: OpenAI;
     }> = {},
   ): LLM {
@@ -301,6 +312,7 @@ export class LLM extends llm.LLM {
       baseURL?: string;
       user?: string;
       temperature?: number;
+      extraKwargs?: Record<string, unknown>;
       client: OpenAI;
     }> = {},
   ): LLM {
@@ -322,6 +334,7 @@ export class LLM extends llm.LLM {
       model: string;
       baseURL?: string;
       temperature?: number;
+      extraKwargs?: Record<string, unknown>;
       client: OpenAI;
     }> = {},
   ): LLM {
@@ -347,6 +360,7 @@ export class LLM extends llm.LLM {
       baseURL?: string;
       user?: string;
       temperature?: number;
+      extraKwargs?: Record<string, unknown>;
       client: OpenAI;
     }> = {},
   ): LLM {
@@ -378,6 +392,7 @@ export class LLM extends llm.LLM {
       baseURL?: string;
       user?: string;
       temperature?: number;
+      extraKwargs?: Record<string, unknown>;
       client: OpenAI;
     }> = {},
   ): LLM {
@@ -409,6 +424,7 @@ export class LLM extends llm.LLM {
       baseURL?: string;
       user?: string;
       temperature?: number;
+      extraKwargs?: Record<string, unknown>;
       client: OpenAI;
     }> = {},
   ): LLM {
@@ -438,6 +454,7 @@ export class LLM extends llm.LLM {
       client?: OpenAI;
       model?: string | MetaChatModels;
       temperature?: number;
+      extraKwargs?: Record<string, unknown>;
       user?: string;
     }> = {},
   ): LLM {
@@ -492,7 +509,7 @@ export class LLM extends llm.LLM {
     extraKwargs?: Record<string, unknown>;
   }): LLMStream {
     const toolCtx = llm.toToolContext(toolCtxInput);
-    const extras: Record<string, unknown> = { ...extraKwargs };
+    const extras: Record<string, unknown> = { ...this.#opts.extraKwargs, ...extraKwargs };
 
     if (this.#opts.metadata) {
       extras.metadata = this.#opts.metadata;

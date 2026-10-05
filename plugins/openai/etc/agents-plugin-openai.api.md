@@ -8,7 +8,7 @@ import { AgentInference } from '@livekit/protocol';
 import { AgentSession as AgentSession_2 } from '@livekit/protocol';
 import { AudioFrame } from '@livekit/rtc-node';
 import { AudioResampler } from '@livekit/rtc-node';
-import type { Context } from '@opentelemetry/api';
+import { Context } from '@opentelemetry/api';
 import { EventEmitter } from 'events';
 import { EventEmitter as EventEmitter_2 } from 'node:events';
 import type { EventMap } from '@livekit/typed-emitter';
@@ -25,7 +25,7 @@ import type { ReadableStreamDefaultReader as ReadableStreamDefaultReader_2 } fro
 import type { Reasoning as Reasoning_2 } from 'openai/resources/shared.js';
 import { RemoteParticipant } from '@livekit/rtc-node';
 import { Room } from '@livekit/rtc-node';
-import type { Span } from '@opentelemetry/api';
+import { Span } from '@opentelemetry/api';
 import type { TextStreamInfo } from '@livekit/rtc-node';
 import { Throws } from '@livekit/throws-transformer/throws';
 import { ThrowsPromise } from '@livekit/throws-transformer/throws';
@@ -779,6 +779,7 @@ export class LLM extends llm.LLM {
         baseURL?: string;
         user?: string;
         temperature?: number;
+        extraKwargs?: Record<string, unknown>;
     }): LLM;
     static withCerebras(opts?: Partial<{
         model: string | CerebrasChatModels;
@@ -786,6 +787,7 @@ export class LLM extends llm.LLM {
         baseURL?: string;
         user?: string;
         temperature?: number;
+        extraKwargs?: Record<string, unknown>;
         client: OpenAI;
     }>): LLM;
     static withDeepSeek(opts?: Partial<{
@@ -794,6 +796,7 @@ export class LLM extends llm.LLM {
         baseURL?: string;
         user?: string;
         temperature?: number;
+        extraKwargs?: Record<string, unknown>;
         client: OpenAI;
     }>): LLM;
     static withFireworks(opts?: Partial<LLMOptions>): LLM;
@@ -803,6 +806,7 @@ export class LLM extends llm.LLM {
         baseURL?: string;
         user?: string;
         temperature?: number;
+        extraKwargs?: Record<string, unknown>;
         client: OpenAI;
     }>): LLM;
     static withMeta(opts?: Partial<{
@@ -811,6 +815,7 @@ export class LLM extends llm.LLM {
         client?: OpenAI;
         model?: string | MetaChatModels;
         temperature?: number;
+        extraKwargs?: Record<string, unknown>;
         user?: string;
     }>): LLM;
     static withOcto(opts?: Partial<{
@@ -819,12 +824,14 @@ export class LLM extends llm.LLM {
         baseURL?: string;
         user?: string;
         temperature?: number;
+        extraKwargs?: Record<string, unknown>;
         client: OpenAI;
     }>): LLM;
     static withOllama(opts?: Partial<{
         model: string;
         baseURL?: string;
         temperature?: number;
+        extraKwargs?: Record<string, unknown>;
         client: OpenAI;
     }>): LLM;
     static withOVHcloud(opts?: Partial<LLMOptions>): LLM;
@@ -834,6 +841,7 @@ export class LLM extends llm.LLM {
         baseURL?: string;
         user?: string;
         temperature?: number;
+        extraKwargs?: Record<string, unknown>;
         client: OpenAI;
     }>): LLM;
     static withTelnyx(opts?: Partial<{
@@ -842,6 +850,7 @@ export class LLM extends llm.LLM {
         baseURL?: string;
         user?: string;
         temperature?: number;
+        extraKwargs?: Record<string, unknown>;
         client: OpenAI;
     }>): LLM;
     static withTogether(opts?: Partial<{
@@ -850,6 +859,7 @@ export class LLM extends llm.LLM {
         baseURL?: string;
         user?: string;
         temperature?: number;
+        extraKwargs?: Record<string, unknown>;
         client: OpenAI;
     }>): LLM;
     static withXAI(opts?: Partial<{
@@ -858,6 +868,7 @@ export class LLM extends llm.LLM {
         baseURL?: string;
         user?: string;
         temperature?: number;
+        extraKwargs?: Record<string, unknown>;
         client: OpenAI;
     }>): LLM;
 }
@@ -898,6 +909,7 @@ export interface LLMOptions {
     baseURL?: string;
     // (undocumented)
     client?: OpenAI;
+    extraKwargs?: Record<string, unknown>;
     // (undocumented)
     maxCompletionTokens?: number;
     // (undocumented)
